@@ -22,6 +22,7 @@ public:
 
 // Functions
 private:
+int max_data_size;
 
 public:
 
