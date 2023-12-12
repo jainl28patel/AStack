@@ -29,16 +29,12 @@ Msocket::Msocket(int domain, int type, int protocol)
 
 ssize_t Msocket::send(const void *buf, size_t len, const sockaddr *addr, socklen_t addr_len)
 {
-    // ssize_t bytes_sent = this->prot->send(buf, len, addr, addr_len);
-    // return bytes_sent;
-    return ssize_t();
+    return this->prot->send(buf, len, addr, addr_len);
 }
 
 ssize_t Msocket::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
 {
-    // ssize_t bytes_recv = this->prot->recv(buf, len, addr, addr_len);
-    // return bytes_recv;
-    return ssize_t();
+    return this->prot->recv(buf, len, addr, addr_len);
 }
 
 Msocket::~Msocket()
