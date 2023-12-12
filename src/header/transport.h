@@ -26,5 +26,6 @@ public:
     Transport();
     virtual ssize_t send(const void* buf, size_t len, const sockaddr* addr, socklen_t addrlen);
     virtual ssize_t recv(void* buf, size_t len, sockaddr* addr, socklen_t* addr_len);
+    virtual int bind_m(const sockaddr *addr, socklen_t addrlen);
     virtual ~Transport();
 };

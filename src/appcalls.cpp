@@ -10,5 +10,10 @@ ssize_t sendto_m(Msocket &sock, const void *buf, size_t len, int flags, const so
 ssize_t recvfrom_m(Msocket &sock, void *buf, size_t buf_len, int flags, sockaddr *addr, socklen_t *addr_len)
 {
     ssize_t recv_bytes = sock.recv(buf, buf_len, addr, addr_len);
-    return ssize_t();
+    return recv_bytes;
+}
+
+int bind_m(Msocket& sock, const struct sockaddr *addr, socklen_t addrlen)
+{
+    return sock.bind(addr, addrlen);
 }

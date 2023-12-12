@@ -37,6 +37,7 @@ public:
     Msocket(int domain, int type, int protocol);
     ssize_t send(const void* buf, size_t len, const sockaddr* addr, socklen_t addrlen);
     ssize_t recv(void* buf, size_t len, sockaddr* addr, socklen_t* addr_len);
+    int bind(const struct sockaddr *addr, socklen_t addrlen);
 
     ~Msocket();
 };

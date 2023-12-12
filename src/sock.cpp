@@ -37,6 +37,11 @@ ssize_t Msocket::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len
     return this->prot->recv(buf, len, addr, addr_len);
 }
 
+int Msocket::bind(const sockaddr *addr, socklen_t addrlen)
+{
+    return this->prot->bind_m(addr, addrlen);
+}
+
 Msocket::~Msocket()
 {
     delete this->prot;

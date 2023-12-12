@@ -82,8 +82,7 @@ ssize_t UDP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t a
 
 
         // send the data
-        struct sockaddr_in dest_addr;
-        ssize_t fragment_len = sendto(this->send_sock, packet, curr_packet_len, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+        ssize_t fragment_len = sendto(this->send_sock, packet, curr_packet_len, 0, addr, addrlen);
         if(fragment_len == -1) {
             curr_end -= std::min(max_data_size, size-curr_end);
             continue;
@@ -101,10 +100,16 @@ ssize_t UDP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t a
 
 ssize_t UDP::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
 {
+
     return ssize_t(69);
 }
 
-unsigned short UDP::checksum(unsigned short* buff, int _16bitword)
+int UDP::bind_m(const sockaddr *addr, socklen_t addrlen)
+{
+    return bind(this->send_sock, addr, addrlen);
+}
+
+unsigned short UDP::checksum(unsigned short *buff, int _16bitword)
 {
     unsigned long sum;
     for(sum=0;_16bitword>0;_16bitword--)
