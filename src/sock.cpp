@@ -1,10 +1,10 @@
 #pragma once
 
-#include "./header/transport.h"
-#include "./header/udp.h"
-#include "./header/tcp.h"
-#include "./header/sock.h"
-#include "./header/appcalls.h"
+#include "transport.h"
+#include "udp.h"
+#include "tcp.h"
+#include "sock.h"
+#include "appcalls.h"
 
 #include "transport.cpp"
 #include "udp.cpp"
