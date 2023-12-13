@@ -4,7 +4,7 @@
 
 UDP::UDP() {
     send_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    recv_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    recv_sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
     this->max_data_size = 1024; // 1024 bytes
     this->id = 1;
     if(this->send_sock < 0 || this->recv_sock < 0) {
@@ -58,15 +58,16 @@ ssize_t UDP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t a
 
         ip->version     =   (unsigned int)    4;
         ip->ihl         =   (unsigned int)    5;
-        ip->tos         =   (uint8_t)         16;
-        // ip->tot_len     =   
-        ip->id          =   (uint16_t)        this->id++;
-        // ip->frag_off    = 
-        ip->ttl         =   (uint8_t)         32;
-        ip->protocol    =   (uint8_t)         17;
+        ip->tos         =   (uint8_t)         0;
+        ip->tot_len     =   (uint16_t)        curr_packet_len;
+        ip->id          =   (uint16_t)        htons(this->id++);
+        ip->frag_off    =   (uint16_t)        0;                /*The originating protocol module of a complete datagram
+                                                                 sets the more-fragments flag to zero and the fragment offset to zero.*/
+        ip->ttl         =   (uint8_t)         255;
+        ip->protocol    =   (uint8_t)         IPPROTO_UDP;
         ip->check       =   checksum((unsigned short*)(packet), (sizeof(struct iphdr))/2);
-        // ip->saddr       =
-        // ip->daddr       =
+        ip->saddr       =   (uint32_t)        inet_addr("127.0.0.1");
+        ip->daddr       =   (uint32_t)        ((const sockaddr_in*)(addr))->sin_addr.s_addr;
 
 
         // make udp-header
@@ -79,7 +80,6 @@ ssize_t UDP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t a
 
         // add data
         memcpy(packet + start, data_to_send, curr_end - curr_start + 1);
-
 
         // send the data
         ssize_t fragment_len = sendto(this->send_sock, packet, curr_packet_len, 0, addr, addrlen);
@@ -103,18 +103,21 @@ ssize_t UDP::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
     void* recv_buf = (void *)(malloc(MAX_RECV_PACKET));
     struct sockaddr *recv_addr = (struct sockaddr*)(malloc(sizeof(struct sockaddr)));
     memset(recv_addr, 0, sizeof(struct sockaddr));
-    socklen_t *recv_addr_len;
-    ssize_t bytes_recieved = recvfrom(this->recv_sock, recv_buf, MAX_RECV_PACKET, 0, recv_addr, recv_addr_len);
+    socklen_t recv_addr_len = sizeof(struct sockaddr);
+    ssize_t bytes_recieved = recvfrom(this->recv_sock, recv_buf, MAX_RECV_PACKET, 0, recv_addr, &recv_addr_len);
+    bool valid = true;
 
     // remove ip-header
     unsigned int start = 0;
     struct iphdr* ip = (struct iphdr*)(recv_buf);
     start += (ip->ihl) * 4;     //  ip->hl : no of 32 bit word. 32 bit = 4 bytes
+    // check checksum if not zero
 
     // remove udp-header
     struct udphdr* udp = (struct udphdr*)((char *)recv_buf + start);
     start += (unsigned int)sizeof(struct udphdr);
     unsigned int data_len = (unsigned int)(udp->len - 8);
+    // check checksum if not zero
 
     // copy data to buf by truncating to 'len'
     len = std::min(len, (size_t)data_len);
@@ -123,7 +126,7 @@ ssize_t UDP::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
     // fill addr if not null
     if(addr!=NULL && addr_len!=NULL) {
         addr = recv_addr;
-        addr_len = recv_addr_len;
+        *addr_len = recv_addr_len;
     }
 
     return bytes_recieved;
