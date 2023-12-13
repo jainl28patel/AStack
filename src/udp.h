@@ -4,13 +4,14 @@
 #include <netinet/in.h>
 #include <error.h>
 #include <unistd.h>
-
 #include <netinet/tcp.h> // TCP header
 #include <netinet/udp.h> // UDP header
 #include <netinet/ip_icmp.h> // ICMP header
 #include <netinet/ip.h> // IP header
 #include <sys/socket.h> // Socket's APIs
 #include <arpa/inet.h> // inet_ntoa
+
+#define MAX_RECV_PACKET 65507   // maximum size of packet that could be recieved
 
 class UDP : public Transport {
 

@@ -6,7 +6,7 @@ UDP::UDP() {
     send_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     recv_sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     this->max_data_size = 1024; // 1024 bytes
-    this->id = 696969;
+    this->id = 1;
     if(this->send_sock < 0 || this->recv_sock < 0) {
         throw "Error is Socket Creation";
     }
@@ -100,8 +100,33 @@ ssize_t UDP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t a
 
 ssize_t UDP::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
 {
+    void* recv_buf = (void *)(malloc(MAX_RECV_PACKET));
+    struct sockaddr *recv_addr = (struct sockaddr*)(malloc(sizeof(struct sockaddr)));
+    memset(recv_addr, 0, sizeof(struct sockaddr));
+    socklen_t *recv_addr_len;
+    ssize_t bytes_recieved = recvfrom(this->recv_sock, recv_buf, MAX_RECV_PACKET, 0, recv_addr, recv_addr_len);
 
-    return ssize_t(69);
+    // remove ip-header
+    unsigned int start = 0;
+    struct iphdr* ip = (struct iphdr*)(recv_buf);
+    start += (ip->ihl) * 4;     //  ip->hl : no of 32 bit word. 32 bit = 4 bytes
+
+    // remove udp-header
+    struct udphdr* udp = (struct udphdr*)((char *)recv_buf + start);
+    start += (unsigned int)sizeof(struct udphdr);
+    unsigned int data_len = (unsigned int)(udp->len - 8);
+
+    // copy data to buf by truncating to 'len'
+    len = std::min(len, (size_t)data_len);
+    memcpy(buf, ((char *)recv_buf+start), len);
+
+    // fill addr if not null
+    if(addr!=NULL && addr_len!=NULL) {
+        addr = recv_addr;
+        addr_len = recv_addr_len;
+    }
+
+    return bytes_recieved;
 }
 
 int UDP::bind_m(const sockaddr *addr, socklen_t addrlen)
