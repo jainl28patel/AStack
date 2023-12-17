@@ -12,12 +12,15 @@
 #include <arpa/inet.h> // inet_ntoa
 
 #define MAX_RECV_PACKET 65507   // maximum size of packet that could be recieved
+#define MIN_RANDOM_PORT 30000   // min value of randomly assigned port when not binded
+#define MAX_RANDOM_PORT 40000   // max value of randomly assigned port when not binded
 
 class UDP : public Transport {
 
 // Variables
 private:
 int send_sock, recv_sock;
+int bind_port;
 
 public:
 
@@ -33,5 +36,6 @@ public:
     ssize_t recv(void* buf, size_t len, sockaddr* addr, socklen_t* addr_len) override;
     int bind_m(const sockaddr *addr, socklen_t addrlen) override;
     unsigned short checksum(unsigned short* buff, int _16bitword);
+    int getRandomPort(int minimum_number, int max_number);
     ~UDP();
 };

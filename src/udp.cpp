@@ -7,6 +7,7 @@ UDP::UDP() {
     recv_sock = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
     this->max_data_size = 1024; // 1024 bytes
     this->id = 1;
+    this->bind_port = -1;
     if(this->send_sock < 0 || this->recv_sock < 0) {
         throw "Error is Socket Creation";
     }
@@ -66,21 +67,28 @@ ssize_t UDP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t a
         ip->ttl         =   (uint8_t)         255;
         ip->protocol    =   (uint8_t)         IPPROTO_UDP;
         ip->check       =   checksum((unsigned short*)(packet), (sizeof(struct iphdr))/2);
-        ip->saddr       =   (uint32_t)        inet_addr("127.0.0.1");
+        ip->saddr       =   (uint32_t)        inet_addr("127.0.0.1");                       // TODO: add utility to get user ip based on connected interface
         ip->daddr       =   (uint32_t)        ((const sockaddr_in*)(addr))->sin_addr.s_addr;
 
 
         // make udp-header
         struct udphdr* udp = (struct udphdr*)(packet + start);
         start += sizeof(struct udphdr);
-        // udp->source     =
-        // udp->dest       =
-        udp->len        =   (uint16_t)      (sizeof(struct udphdr) + sizeof(curr_end-curr_start+1));
-        // udp->check      =
 
         // add data
         memcpy(packet + start, data_to_send, curr_end - curr_start + 1);
 
+        // if not bind port assign random port btw 30000 & 40000
+        if(this->bind_port==-1) {
+            this->bind_port = getRandomPort(MIN_RANDOM_PORT, MAX_RANDOM_PORT);
+        }
+
+        udp->uh_sport       =   htons(this->bind_port);
+        udp->uh_dport       =   ((const sockaddr_in*)(addr))->sin_port;
+        udp->uh_ulen        =   (uint16_t)      htons((sizeof(struct udphdr) + curr_end-curr_start+1));
+        // udp->uh_sum         =   checksum((unsigned short*)(packet + sizeof(struct iphdr)), (sizeof(struct udphdr) + curr_end-curr_start+1)/2);
+        udp->uh_sum         =   0;  // TODO: Implement checksum
+       
         // send the data
         ssize_t fragment_len = sendto(this->send_sock, packet, curr_packet_len, 0, addr, addrlen);
         if(fragment_len == -1) {
@@ -134,7 +142,11 @@ ssize_t UDP::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
 
 int UDP::bind_m(const sockaddr *addr, socklen_t addrlen)
 {
-    return bind(this->send_sock, addr, addrlen);
+    int retVal = bind(this->send_sock, addr, addrlen);
+    if(retVal!=-1) {
+        this->bind_port = ((struct sockaddr_in*)addr)->sin_port;
+    }
+    return retVal;
 }
 
 unsigned short UDP::checksum(unsigned short *buff, int _16bitword)
@@ -146,4 +158,9 @@ unsigned short UDP::checksum(unsigned short *buff, int _16bitword)
     sum += (sum>>16);
     return (unsigned short)(~sum);
 }
- 
+
+int UDP::getRandomPort(int minimum_number, int max_number) {
+    srand(time(0));
+    int port = rand() % (max_number + 1 - minimum_number) + minimum_number;
+    return port;
+}
