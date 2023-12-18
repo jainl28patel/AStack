@@ -42,6 +42,21 @@ int Msocket::bind(const sockaddr *addr, socklen_t addrlen)
     return this->prot->bind_m(addr, addrlen);
 }
 
+int Msocket::connect_m(const sockaddr *addr, socklen_t addrlen)
+{
+    return this->prot->connect_m(addr, addrlen);
+}
+
+int Msocket::accept_m(sockaddr *addr, socklen_t *addrlen)
+{
+    return this->prot->accept_m(addr, addrlen);
+}
+
+int Msocket::listen_m(int backlog)
+{
+    return this->prot->listen_m(backlog);
+}
+
 Msocket::~Msocket()
 {
     delete this->prot;

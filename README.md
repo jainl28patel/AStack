@@ -5,3 +5,10 @@
 ## TODO - (left to be done afterwards)
 - [ ] Implement checksum in UDP header.
 - [ ] add utility to get user ip based on connected interface.
+
+## Future Goals
+- [ ] Make UDP proper as per standards mentioned in RFC. All the apis exposed should be same as kernel so no code change is needed while porting
+- [ ] Write TCP as per rfc. Rest same as above
+- [ ] Optimise whole code as much as possible
+- [ ] Add tests
+- [ ] Add performance tests

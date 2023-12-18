@@ -38,6 +38,8 @@ public:
     ssize_t send(const void* buf, size_t len, const sockaddr* addr, socklen_t addrlen);
     ssize_t recv(void* buf, size_t len, sockaddr* addr, socklen_t* addr_len);
     int bind(const struct sockaddr *addr, socklen_t addrlen);
-
+    int connect_m(const struct sockaddr* addr, socklen_t addrlen);
+    int accept_m(sockaddr *addr, socklen_t *addrlen);
+    int listen_m(int backlog);
     ~Msocket();
 };

@@ -21,13 +21,15 @@ class UDP : public Transport {
 private:
 int send_sock, recv_sock;
 int bind_port;
+int max_data_size;
+uint16_t id;
 
 public:
 
 // Functions
 private:
-int max_data_size;
-uint16_t id;
+    unsigned short checksum(unsigned short* buff, int _16bitword);
+    int getRandomPort(int minimum_number, int max_number);
 
 public:
 
@@ -35,7 +37,5 @@ public:
     ssize_t send(const void* buf, size_t len, const sockaddr* addr, socklen_t addrlen) override;
     ssize_t recv(void* buf, size_t len, sockaddr* addr, socklen_t* addr_len) override;
     int bind_m(const sockaddr *addr, socklen_t addrlen) override;
-    unsigned short checksum(unsigned short* buff, int _16bitword);
-    int getRandomPort(int minimum_number, int max_number);
     ~UDP();
 };

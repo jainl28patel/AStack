@@ -17,4 +17,20 @@ int Transport::bind_m(const sockaddr *addr, socklen_t addrlen)
 {
     return -1;
 }
+
+int Transport::connect_m(const sockaddr *addr, socklen_t addrlen)
+{
+    return 0;
+}
+
+int Transport::accept_m(sockaddr *addr, socklen_t *addrlen)
+{
+    return 0;
+}
+
+int Transport::listen_m(int backlog)
+{
+    return 0;
+}
+
 Transport::~Transport() {}

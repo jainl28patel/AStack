@@ -17,3 +17,18 @@ int bind_m(Msocket& sock, const struct sockaddr *addr, socklen_t addrlen)
 {
     return sock.bind(addr, addrlen);
 }
+
+int connect_m(Msocket& sock, const struct sockaddr* addr, socklen_t addrlen)
+{
+    return sock.connect_m(addr, addrlen);
+}
+
+int accept_m(Msocket &sock, sockaddr *addr, socklen_t *addrlen)
+{
+    return sock.accept_m(addr, addrlen);
+}
+
+int listen_m(Msocket &sock, int backlog)
+{
+    return sock.listen_m(backlog);
+}
