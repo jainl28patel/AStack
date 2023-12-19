@@ -1,6 +1,10 @@
 #pragma once
 
+#define MIN_RANDOM_PORT 30000   // min value of randomly assigned port when not binded
+#define MAX_RANDOM_PORT 40000   // max value of randomly assigned port when not binded
 #define INIT_SEQ_NO 1
+
+#include <netinet/tcp.h>
 
 struct sendSeqVar {
     char* UNA;  // unacknowledged
@@ -27,6 +31,14 @@ struct recvBuf {
 
 };
 
+struct pseudo_header {
+  uint32_t s_addr;
+  uint32_t d_addr;
+  uint8_t nil;
+  uint8_t IP_protocol;
+  uint16_t tot_Len;
+};
+
 class TCP : public Transport {
 
 // Variables ans enums
@@ -37,6 +49,10 @@ private:
 
     // state
     int sockState;
+    int id;
+
+    // process identifier
+    int bind_port;
 
     // type
     int sockType;
@@ -77,11 +93,12 @@ private:
 
 
     // Low level private API. To be used by high level API to carry out execution
-    auto send_packet(auto required_struct_fields);
+    bool send_syn_ack(bool is_send_syn, uint32_t seq_no, bool is_send_ack, uint32_t ack_no, const struct sockaddr* addr, socklen_t addrlen);
+    bool send_packet(tcphdr* tcp, const sockaddr* addr, socklen_t addrlen, const char* const data, int dataLen);
 
     // Utility functions
-    bool send_syn_ack(bool is_send_syn, int )
-    auto make_ip_header();
+    int getRandomPort(int minimum_number, int max_number);
+    uint16_t checksum(uint16_t *buff, int _16bitword);
 
 public:
     TCP();

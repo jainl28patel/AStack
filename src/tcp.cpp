@@ -1,6 +1,35 @@
 #pragma once
 #include "tcp.h"
 #include "utils.cpp"
+#include<iostream>
+#include <string.h>
+
+void debug_print_ip(const iphdr* const ip) {
+    std::cout << "ip->version: " << ip->version << std::endl;
+    std::cout << "ip->ihl: " << ip->ihl << std::endl;
+    std::cout << "ip->tos: " << ip->tos << std::endl;
+    std::cout << "ip->tot_len: " << ip->tot_len << std::endl;
+    std::cout << "ip->id: " << ip->id << std::endl;
+    std::cout << "ip->frag_off: " << ip->frag_off << std::endl;
+    std::cout << "ip->ttl: " << ip->ttl << std::endl;
+    std::cout << "ip->protocol: " << ip->protocol << std::endl;
+    std::cout << "ip->check: " << ip->check << std::endl;
+    std::cout << "ip->saddr: " << ip->saddr << std::endl;
+    std::cout << "ip->daddr: " << ip->daddr << std::endl;
+}
+
+void debug_print_tcp(const tcphdr* tcp) {
+    std::cout << "tcp->th_sport: " << ntohs(tcp->th_sport) << std::endl;
+    std::cout << "tcp->th_dport: " << ntohs(tcp->th_dport) << std::endl;
+    std::cout << "tcp->th_seq: " << tcp->th_seq << std::endl;
+    std::cout << "tcp->th_ack: " << tcp->th_ack << std::endl;
+    std::cout << "tcp->th_x2: " << tcp->th_x2 << std::endl;
+    std::cout << "tcp->th_off: " << tcp->th_off << std::endl;
+    std::cout << "tcp->th_flags: " << (uint8_t)tcp->th_flags << std::endl;
+    std::cout << "tcp->th_win: " << tcp->th_win << std::endl;
+    std::cout << "tcp->th_sum: " << tcp->th_sum << std::endl;
+    std::cout << "tcp->th_urp: " << tcp->th_urp << std::endl;
+}
 
 /*
     ---------------------------------------------------------------
@@ -11,13 +40,15 @@
 
 TCP::TCP()
 {
-    this->sock      = socket(AF_INET, SOCK_RAW, IPPROTO_TCP);
+    this->sock      = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     if(this->sock < 0) {
         throw "Error is Socket Creation";
     }
 
     this->sockState = TCP::State::CLOSED;
     this->sockType  = TCP::Type::UNDEFINED;
+    this->bind_port = -1;
+    this->id        =  1;
     this->sendTCB   = new sendSeqVar();
     this->recvTCB   = new recvSeqVar();
     this->s_buf     = new sendBuf();
@@ -36,11 +67,18 @@ ssize_t TCP::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
 
 int TCP::bind_m(const sockaddr *addr, socklen_t addrlen)
 {
-    return 0;
+    int retVal = bind(this->sock, addr, addrlen);
+    if(retVal!=-1) {
+        this->bind_port = ((struct sockaddr_in*)addr)->sin_port;
+    }
+    return retVal;
 }
 
 int TCP::connect_m(const sockaddr *addr, socklen_t addrlen)
 {
+    if(this->bind_port == -1) {
+        this->bind_port = this->getRandomPort(MIN_RANDOM_PORT, MAX_RANDOM_PORT);
+    }
     bool handshake_status = this->three_way_handshake(addr, addrlen);
     return handshake_status;
 }
@@ -78,6 +116,8 @@ bool TCP::three_way_handshake(const sockaddr *addr, socklen_t addrlen)
 
     // sendSYN
     // bool success = sendSYNACK(bool isSendSyn, seqNo_to_send, bool isSendAck, ack_no)
+    print("three");
+    bool success = this->send_syn_ack(1, 1, 0, 0, addr, addrlen);
     // recieve SYN/ACK
     // bool recievedOrNot()
     // sendACK
@@ -97,20 +137,114 @@ bool TCP::three_way_handshake(const sockaddr *addr, socklen_t addrlen)
 
 
 
-auto TCP::send_packet(auto required_struct_fields)
+bool TCP::send_packet(tcphdr* tcp, const sockaddr* addr, socklen_t addrlen, const char* const data = nullptr, int dataLen = 0)
 {
-    // make TCP Packet
-        // makeIPHeader
-        // getSeqNo
-        // getAckNo
-        // getDataOfset
-        // getTypeOfPacket
-        // getWindow
-        // getCheckSum
-        // get Data
-        // make packet and store in QUEUE
-        // start timer for queue and send
-    // send packet
+
+    unsigned char*          packet;
+    unsigned char*          pseudo_packet;
+    struct pseudo_header*   p_hdr = new pseudo_header();
+    struct iphdr*           ip = new iphdr();
+
+    // assembling the iphdr
+    ip->version     =   (unsigned int)    4;
+    ip->ihl         =   (unsigned int)    5;
+    ip->tos         =   (uint8_t)         0;
+    ip->tot_len     =   (uint16_t)        (sizeof(struct iphdr) + sizeof(struct tcphdr) + dataLen);
+    ip->id          =   (uint16_t)        htons(this->id++);
+    ip->frag_off    =   (uint16_t)        0;                /*The originating protocol module of a complete datagram
+                                                                sets the more-fragments flag to zero and the fragment offset to zero.*/
+    ip->ttl         =   (uint8_t)         255;
+    ip->protocol    =   (uint8_t)         IPPROTO_TCP;
+    ip->check       =                     0;
+    ip->saddr       =   (uint32_t)        inet_addr("127.0.0.1");                       // TODO: add utility to get user ip based on connected interface
+    ip->daddr       =   (uint32_t)        ((const sockaddr_in*)(addr))->sin_addr.s_addr;
+
+ 
+    // assembling the pseudo_header
+    p_hdr->s_addr       =   ip->saddr;
+    p_hdr->d_addr       =   ip->daddr;
+    p_hdr->nil          =   0;
+    p_hdr->IP_protocol  =   ip->protocol;
+    p_hdr->tot_Len      =   ip->tot_len;
+
+ 
+    // make pseudo_packet for calculating pseudo header checksum
+    if((sizeof(struct tcphdr) + sizeof(struct pseudo_header) + dataLen)%2)
+        pseudo_packet = (unsigned char*)(malloc(sizeof(struct tcphdr) + sizeof(struct pseudo_header) + dataLen + 1));   // add pad to complete 16bit words of checksum
+    else
+        pseudo_packet = (unsigned char*)(malloc(sizeof(struct tcphdr) + sizeof(struct pseudo_header) + dataLen));
+     
+    int pack_len = 0;
+    memcpy(pseudo_packet, p_hdr, sizeof(struct pseudo_header));
+    pack_len += sizeof(struct pseudo_header);
+    memcpy(pseudo_packet+pack_len, tcp, sizeof(struct tcphdr));
+    pack_len += sizeof(struct tcphdr);
+    if(dataLen) {
+        memcpy(pseudo_packet+pack_len, data, dataLen);
+        pack_len += dataLen;
+    }
+ 
+    // geting the tcp checksum
+    tcp->check = checksum((unsigned short*)(pseudo_packet), (pack_len)/2);
+
+
+    // making packet
+    packet        = (unsigned char*)(malloc(sizeof(struct iphdr) + sizeof(struct tcphdr) + dataLen));
+    pack_len      = 0;
+
+    memcpy(packet + pack_len, ip, sizeof(struct iphdr));
+    pack_len += sizeof(struct iphdr);
+    memcpy(packet + pack_len, tcp, sizeof(struct tcphdr));
+    pack_len += sizeof(struct tcphdr);
+    if(dataLen) {
+        memcpy(packet + pack_len, data, dataLen);
+        pack_len += dataLen;
+    }
+ 
+    ip->check   =   checksum((unsigned short*)(packet), (pack_len)/2);
+    memcpy(packet, ip, sizeof(struct iphdr));
+
+    // send the packet
+    int sent_status = sendto(this->sock, packet, pack_len, 0, addr, addrlen);
+
+    // debug
+    debug_print_ip(ip);
+    debug_print_tcp(tcp);
+
+    // free the memory
+    free(packet);
+    free(pseudo_packet);
+    delete p_hdr;
+    delete ip;
+
+    return sent_status;
+}
+
+bool TCP::send_syn_ack(bool is_send_syn, uint32_t seq_no, bool is_send_ack, uint32_t ack_no, const struct sockaddr* addr, socklen_t addrlen)
+{
+    // print("send syn");
+    struct tcphdr tcp;
+    
+    tcp.source = (uint16_t) 9000;
+    tcp.dest = ((struct sockaddr_in*)addr)->sin_port;
+    tcp.seq = seq_no;
+    tcp.ack_seq = ack_no;
+    tcp.doff = 5;
+    tcp.res1 = 0;
+    tcp.res2 = 0;
+    tcp.fin = 0;
+    tcp.syn = 1;
+    tcp.rst = 0;
+    tcp.psh = 0;
+    tcp.ack = is_send_ack;
+    tcp.urg = 0;
+    tcp.window = htons(5840);
+    tcp.check = 0;
+    tcp.urg_ptr = 0;
+
+    bool status = send_packet(&tcp, addr, addrlen);
+
+    return false;
 }
 
 
@@ -118,7 +252,19 @@ auto TCP::send_packet(auto required_struct_fields)
     Utility functions
 */
 
-auto TCP::make_ip_header()
-{
+int TCP::getRandomPort(int minimum_number, int max_number) {
+    srand(time(0));
+    int port = rand() % (max_number + 1 - minimum_number) + minimum_number;
+    return port;
+}
 
+
+uint16_t TCP::checksum(uint16_t *buff, int _16bitword)
+{
+    unsigned long sum;
+    for(sum=0;_16bitword>0;_16bitword--)
+        sum+=htons(*(buff)++);
+    sum = ((sum >> 16) + (sum & 0xFFFF));
+    sum += (sum>>16);
+    return (uint16_t)(~sum);
 }
