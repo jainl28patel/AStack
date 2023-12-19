@@ -3,6 +3,7 @@
 #define MIN_RANDOM_PORT 30000   // min value of randomly assigned port when not binded
 #define MAX_RANDOM_PORT 40000   // max value of randomly assigned port when not binded
 #define INIT_SEQ_NO 1
+#define MAX_RECV_BUF_SIZE 65535
 
 #include <netinet/tcp.h>
 
@@ -37,6 +38,32 @@ struct pseudo_header {
   uint8_t nil;
   uint8_t IP_protocol;
   uint16_t tot_Len;
+};
+
+struct tcp_control {
+    bool     urg;
+    bool     ack;
+    bool     psh;
+    bool     rst;
+    bool     syn;
+    bool     fin;
+    uint32_t seq_no;
+    uint32_t ack_no;
+
+    tcp_control() {
+        syn    =  false;
+        ack    =  false;
+        fin    =  false;
+        psh    =  false;
+        rst    =  false;
+        urg    =  false;
+        seq_no =  0;
+        ack_no =  0;
+    }
+
+    tcp_control(bool urg, bool ack, bool psh, bool rst, bool syn, bool fin, uint32_t seq_no, uint32_t ack_no) :
+        urg(urg), ack(ack), psh(psh), rst(rst), syn(syn), fin(fin), seq_no(seq_no), ack_no(ack_no)
+        {}
 };
 
 class TCP : public Transport {
@@ -93,8 +120,9 @@ private:
 
 
     // Low level private API. To be used by high level API to carry out execution
-    bool send_syn_ack(bool is_send_syn, uint32_t seq_no, bool is_send_ack, uint32_t ack_no, const struct sockaddr* addr, socklen_t addrlen);
+    bool send_control(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen);
     bool send_packet(tcphdr* tcp, const sockaddr* addr, socklen_t addrlen, const char* const data, int dataLen);
+    bool receive_packet(tcphdr* tcp, iphdr* ip, sockaddr* addr, socklen_t* addrlen, char* data, int& dataLen);
 
     // Utility functions
     int getRandomPort(int minimum_number, int max_number);

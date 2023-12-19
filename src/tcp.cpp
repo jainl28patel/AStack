@@ -69,7 +69,7 @@ int TCP::bind_m(const sockaddr *addr, socklen_t addrlen)
 {
     int retVal = bind(this->sock, addr, addrlen);
     if(retVal!=-1) {
-        this->bind_port = ((struct sockaddr_in*)addr)->sin_port;
+        this->bind_port = ntohs(((struct sockaddr_in*)addr)->sin_port);
     }
     return retVal;
 }
@@ -115,17 +115,19 @@ bool TCP::three_way_handshake(const sockaddr *addr, socklen_t addrlen)
 {
 
     // sendSYN
-    // bool success = sendSYNACK(bool isSendSyn, seqNo_to_send, bool isSendAck, ack_no)
-    print("three");
-    bool success = this->send_syn_ack(1, 1, 0, 0, addr, addrlen);
     // recieve SYN/ACK
     // bool recievedOrNot()
     // sendACK
     // bool success = sendSYNACK(bool isSendSyn, seqNo_to_send, bool isSendAck, ack_no)
     // on success return success 
 
+    tcp_control ctrl(0,0,0,0,1,0,1,0);
+    bool success = this->send_control(ctrl, addr, addrlen);
+
     return 0;
 }
+
+
 
 /*
     -------------------------------------------------------------
@@ -152,7 +154,11 @@ bool TCP::send_packet(tcphdr* tcp, const sockaddr* addr, socklen_t addrlen, cons
     ip->tot_len     =   (uint16_t)        (sizeof(struct iphdr) + sizeof(struct tcphdr) + dataLen);
     ip->id          =   (uint16_t)        htons(this->id++);
     ip->frag_off    =   (uint16_t)        0;                /*The originating protocol module of a complete datagram
-                                                                sets the more-fragments flag to zero and the fragment offset to zero.*/
+                           bool TCP::receive_packet(tcphdr *tcp, iphdr *ip, sockaddr *addr, socklen_t *addrlen, char *data, int dataLen)
+{
+    return false;
+}
+                                     sets the more-fragments flag to zero and the fragment offset to zero.*/
     ip->ttl         =   (uint8_t)         255;
     ip->protocol    =   (uint8_t)         IPPROTO_TCP;
     ip->check       =                     0;
@@ -220,31 +226,48 @@ bool TCP::send_packet(tcphdr* tcp, const sockaddr* addr, socklen_t addrlen, cons
     return sent_status;
 }
 
-bool TCP::send_syn_ack(bool is_send_syn, uint32_t seq_no, bool is_send_ack, uint32_t ack_no, const struct sockaddr* addr, socklen_t addrlen)
+bool TCP::receive_packet(tcphdr *tcp, iphdr *ip, sockaddr *addr, socklen_t *addrlen, char *data, int& dataLen)
 {
-    // print("send syn");
+    int recv_status = recvfrom(this->sock, data, MAX_RECV_BUF_SIZE, 0, addr, addrlen);
+
+    // extract ip header
+    ip = (struct iphdr*)data;
+    dataLen += ip->ihl * 4;
+
+    // extract tcp header
+    tcp = (struct tcphdr*)(data + dataLen);
+    dataLen += tcp->th_off * 4;
+
+    // extract data
+    data = data + dataLen;
+
+    return recv_status;
+}
+
+
+// bool TCP::send_control(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen)
+bool TCP::send_control(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen)
+{
     struct tcphdr tcp;
     
-    tcp.source = (uint16_t) 9000;
-    tcp.dest = ((struct sockaddr_in*)addr)->sin_port;
-    tcp.seq = seq_no;
-    tcp.ack_seq = ack_no;
-    tcp.doff = 5;
-    tcp.res1 = 0;
-    tcp.res2 = 0;
-    tcp.fin = 0;
-    tcp.syn = 1;
-    tcp.rst = 0;
-    tcp.psh = 0;
-    tcp.ack = is_send_ack;
-    tcp.urg = 0;
-    tcp.window = htons(5840);
-    tcp.check = 0;
-    tcp.urg_ptr = 0;
+    tcp.source    = (uint16_t)  htons(this->bind_port);
+    tcp.dest      = (uint16_t)  ((struct sockaddr_in*)addr)->sin_port;
+    tcp.seq       = (uint32_t)  ctrl.seq_no;
+    tcp.ack_seq   = (uint32_t)  ctrl.ack_no;
+    tcp.doff      = (uint16_t)  5;
+    tcp.res1      = (uint16_t)  0;
+    tcp.res2      = (uint16_t)  0;
+    tcp.fin       = (uint16_t)  ctrl.fin;
+    tcp.syn       = (uint16_t)  ctrl.syn;
+    tcp.rst       = (uint16_t)  ctrl.rst;
+    tcp.psh       = (uint16_t)  ctrl.psh;
+    tcp.ack       = (uint16_t)  ctrl.ack;
+    tcp.urg       = (uint16_t)  ctrl.urg;
+    tcp.window    = (uint16_t)  htons(5840);
+    tcp.check     = (uint16_t)  0;
+    tcp.urg_ptr   = (uint16_t)  0;
 
-    bool status = send_packet(&tcp, addr, addrlen);
-
-    return false;
+    return send_packet(&tcp, addr, addrlen);
 }
 
 
