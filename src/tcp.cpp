@@ -121,31 +121,33 @@ TCP::~TCP()
 bool TCP::three_way_handshake(const sockaddr *addr, socklen_t addrlen)
 {
 
-    // sendSYN
-    // recieve SYN/ACK
-    // bool recievedOrNot()
-    // sendACK
-    // bool success = sendSYNACK(bool isSendSyn, seqNo_to_send, bool isSendAck, ack_no)
-    // on success return success 
-
+    // Sending SYN
     tcp_control ctrl(0,0,0,0,1,0,1,0);
-    bool success = this->send_control(ctrl, addr, addrlen);
+    int no_of_try = 0;
+    while(!this->send_control_packet(ctrl,addr,addrlen) && no_of_try++ <= MAX_RETRANSMITION)
+    if(no_of_try > MAX_RETRANSMITION) return false;
 
+    // Recieving SYN-ACK
     char* buf = new char[MAX_RECV_BUF_SIZE];
-    struct sockaddr addr2;
-    socklen_t addrlen2;
-    struct tcphdr tcp;
-    struct iphdr ip;
-    int len = MAX_RECV_BUF_SIZE;
-    this->receive_packet(&tcp, &ip, &addr2, &addrlen2, buf, len);
+    int status = this->receive_packet(buf, MAX_RECV_BUF_SIZE);  // TODO: Add timeout upto what time to wait
+    if(status <= 0) {
+        printf("receive_packet() failed\n");
+        return false;
+    }
 
-    print("hehe");
-    debug_print_tcp(&tcp);
-    debug_print_ip(&ip);
-    print(((struct sockaddr_in*)&addr2)->sin_addr.s_addr);
-    print(inet_addr("127.0.0.1"));
+    status = receive_control_packet();
 
-    return 0;
+    // TODO: check validity of ACK Packet
+
+    // send ACK
+    tcp_control ctrl2(0,1,0,0,0,0,this->seq_next, this->ack_next);  // TODO: Add ack number as per recieved packet
+    no_of_try = 0;
+    while(!this->send_control_packet(ctrl2,addr,addrlen) && no_of_try++ <= MAX_RETRANSMITION)
+    if(no_of_try > MAX_RETRANSMITION) return false;
+
+    // Three-way handshake done
+    return true;
+ 
 }
 
 
@@ -165,33 +167,57 @@ bool TCP::send_packet(char* packet, int& packet_len, const sockaddr* addr, sockl
     return sendto(sock, packet, packet_len, 0, (struct sockaddr*)addr, addrlen);
 }
 
-bool TCP::receive_packet(tcphdr *tcp, iphdr *ip, sockaddr *addr, socklen_t *addrlen, char *data, int& dataLen)
+int TCP::receive_packet(char* buffer, size_t buffer_length)
 {
-    int recv_status = recvfrom(this->sock, data, MAX_RECV_BUF_SIZE, 0, addr, addrlen);
+	unsigned short dst_port;
+	int received;
 
-    // extract ip header
-    ip = (struct iphdr*)data;
-    dataLen += ip->ihl * 4;
-
-    // extract tcp header
-    tcp = (struct tcphdr*)(data + dataLen);
-    dataLen += tcp->th_off * 4;
-
-    // extract data
-    data = data + dataLen;
-
-    return recv_status;
+    // TODO: Add timeout
+	do
+	{
+		received = recvfrom(sock, buffer, buffer_length, 0, NULL, NULL);
+		if (received < 0)
+			break;
+		memcpy(&dst_port, buffer + 22, sizeof(dst_port));
+	}
+	while (dst_port != htons(this->bind_port));
+	printf("received bytes: %d\n", received);
+	return received;
 }
 
 
-// bool TCP::send_control(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen)
-bool TCP::send_control(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen)
+
+bool TCP::send_control_packet(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen)
 {
     char* packet;
     int packet_len;
     this->create_control_packet(ctrl, (const sockaddr_in*)addr, &packet, &packet_len);
     bool status = this->send_packet(packet, packet_len, addr, addrlen);
     return status;
+}
+
+int TCP::receive_control_packet()
+{
+    int recv_bytes;
+
+    char recv_buf[MAX_RECV_BUF_SIZE];
+    struct tcphdr* tcp;
+    struct iphdr* ip;
+    recv_bytes = receive_packet(recv_buf, MAX_RECV_BUF_SIZE);
+    if(recv_bytes < 0) {
+        printf("Error in receive_packet()");
+        return -1;
+    }
+
+    ip = (struct iphdr*)(recv_buf);
+    tcp = (struct tcphdr*)(recv_buf + ip->ihl*4);
+
+    std::cout << "syn : " << tcp->syn << "ack : " << tcp->ack << std::endl;
+
+    this->seq_next = ntohl(tcp->ack_seq);
+    this->ack_next = ntohl(tcp->seq) + 1;
+
+    return recv_bytes>0;
 }
 
 void TCP::create_control_packet(tcp_control& ctrl, const sockaddr_in* dst, char** out_packet, int* out_packet_len)
@@ -263,8 +289,8 @@ void TCP::create_control_packet(tcp_control& ctrl, const sockaddr_in* dst, char*
 	pseudogram[36] = 0x04;
 	pseudogram[37] = 0x02;
 
-	tcph->check = checksum((unsigned char*)pseudogram, psize);
-	iph->check = checksum((unsigned char*)datagram, iph->tot_len);
+	tcph->check = checksum((const char*)pseudogram, psize);
+	iph->check = checksum((const char*)datagram, iph->tot_len);
 
 	*out_packet = datagram;
 	*out_packet_len = iph->tot_len;
@@ -282,13 +308,36 @@ int TCP::getRandomPort(int minimum_number, int max_number) {
     return port;
 }
 
-
-uint16_t TCP::checksum(unsigned char *buff, int _16bitword)
+unsigned short TCP::checksum(const char *buf, unsigned size)
 {
-    unsigned long sum;
-    for(sum=0;_16bitword>0;_16bitword--)
-        sum+=htons(*(buff)++);
-    sum = ((sum >> 16) + (sum & 0xFFFF));
-    sum += (sum>>16);
-    return (uint16_t)(~sum);
+	unsigned sum = 0, i;
+
+	/* Accumulate checksum */
+	for (i = 0; i < size - 1; i += 2)
+	{
+		unsigned short word16 = *(unsigned short *) &buf[i];
+		sum += word16;
+	}
+
+	/* Handle odd-sized case */
+	if (size & 1)
+	{
+		unsigned short word16 = (unsigned char) buf[i];
+		sum += word16;
+	}
+
+	/* Fold to get the ones-complement result */
+	while (sum >> 16) sum = (sum & 0xFFFF)+(sum >> 16);
+
+	/* Invert to get the negative in ones-complement arithmetic */
+	return ~sum;
+}
+
+void TCP::unpack_header_from_data(iphdr* ip, tcphdr* tcp, char* data, int data_length)
+{
+    print("hi");
+    ip = (struct iphdr*)(data);
+    print("hi");
+    tcp = (struct tcphdr*)(data + ip->ihl*4);
+    print("hi");
 }

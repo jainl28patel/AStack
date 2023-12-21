@@ -2,6 +2,7 @@
 
 #define MIN_RANDOM_PORT 30000   // min value of randomly assigned port when not binded
 #define MAX_RANDOM_PORT 40000   // max value of randomly assigned port when not binded
+#define MAX_RETRANSMITION 5
 #define INIT_SEQ_NO 1
 #define MAX_RECV_BUF_SIZE 65535
 #define DATAGRAM_LEN 4096
@@ -80,6 +81,7 @@ private:
     // state
     int sockState;
     int id;
+    uint32_t seq_next, ack_next;
 
     // process identifier
     int bind_port;
@@ -123,14 +125,16 @@ private:
 
 
     // Low level private API. To be used by high level API to carry out execution
-    bool send_control(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen);
+    bool send_control_packet(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen);
     void create_control_packet(tcp_control& ctrl, const sockaddr_in* dst, char** out_packet, int* out_packet_len);
     bool send_packet(char* packet, int& packet_len, const sockaddr* addr, socklen_t addrlen);
-    bool receive_packet(tcphdr* tcp, iphdr* ip, sockaddr* addr, socklen_t* addrlen, char* data, int& dataLen);
+    int receive_packet(char* buffer, size_t buffer_length);
+    int receive_control_packet();
 
     // Utility functions
+    void unpack_header_from_data(iphdr* ip, tcphdr* tcp_ctrl, char* data, int data_length);
     int getRandomPort(int minimum_number, int max_number);
-    uint16_t checksum(unsigned char *buff, int _16bitword);
+    unsigned short checksum(const char *buf, unsigned size);
 
 public:
     TCP();
