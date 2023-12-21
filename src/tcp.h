@@ -4,6 +4,9 @@
 #define MAX_RANDOM_PORT 40000   // max value of randomly assigned port when not binded
 #define INIT_SEQ_NO 1
 #define MAX_RECV_BUF_SIZE 65535
+#define DATAGRAM_LEN 4096
+#define OPT_SIZE 20
+
 
 #include <netinet/tcp.h>
 
@@ -121,12 +124,13 @@ private:
 
     // Low level private API. To be used by high level API to carry out execution
     bool send_control(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen);
-    bool send_packet(tcphdr* tcp, const sockaddr* addr, socklen_t addrlen, const char* const data, int dataLen);
+    void create_control_packet(tcp_control& ctrl, const sockaddr_in* dst, char** out_packet, int* out_packet_len);
+    bool send_packet(char* packet, int& packet_len, const sockaddr* addr, socklen_t addrlen);
     bool receive_packet(tcphdr* tcp, iphdr* ip, sockaddr* addr, socklen_t* addrlen, char* data, int& dataLen);
 
     // Utility functions
     int getRandomPort(int minimum_number, int max_number);
-    uint16_t checksum(uint16_t *buff, int _16bitword);
+    uint16_t checksum(unsigned char *buff, int _16bitword);
 
 public:
     TCP();
