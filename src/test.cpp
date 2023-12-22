@@ -12,13 +12,14 @@ int main(int argv, char* argc[]) {
 
     cliaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     cliaddr.sin_family = AF_INET;
-    cliaddr.sin_port = htons(8500);
+    cliaddr.sin_port = htons(8700);
 
     bind_m(s, (struct sockaddr*)(&cliaddr), sizeof(struct sockaddr_in));
     connect_m(s, (struct sockaddr*)(&addr), sizeof(struct sockaddr_in));
 
     // send data
     char buf[12] = "Hello World";
+    send_m(s, buf, 12, 0);
     send_m(s, buf, 12, 0);
 
     return 0;

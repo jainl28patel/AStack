@@ -60,6 +60,7 @@ TCP::TCP()
     this->recvTCB   = new recvSeqVar();
     this->s_buf     = new sendBuf();
     this->r_buf     = new recvBuf();
+    this->seq_next  = 1;
 }
 
 ssize_t TCP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t addrlen)
@@ -134,7 +135,7 @@ bool TCP::connect_three_way_handshake(const sockaddr *addr, socklen_t addrlen)
 {
 
     // Sending SYN
-    tcp_control ctrl(0,0,0,0,1,0,1,0);
+    tcp_control ctrl(0,0,0,0,1,0,this->seq_next,0);
     int no_of_try = 0;
     while(!this->send_control_packet(ctrl,addr,addrlen) && no_of_try++ <= MAX_RETRANSMITION)
     if(no_of_try > MAX_RETRANSMITION) return false;
@@ -145,7 +146,7 @@ bool TCP::connect_three_way_handshake(const sockaddr *addr, socklen_t addrlen)
     // TODO: check validity of ACK Packet
 
     // send ACK
-    tcp_control ctrl2(0,1,0,0,0,1,this->seq_next, this->ack_next);  // TODO: Add ack number as per recieved packet
+    tcp_control ctrl2(0,1,0,0,0,0,this->seq_next, this->ack_next);  // TODO: Add ack number as per recieved packet
     no_of_try = 0;
     while(!this->send_control_packet(ctrl2,addr,addrlen) && no_of_try++ <= MAX_RETRANSMITION)
     if(no_of_try > MAX_RETRANSMITION) return false;
@@ -172,7 +173,7 @@ bool TCP::disconnect_three_way_handshake(const sockaddr *addr, socklen_t addrlen
     // TODO: Check for validity;
 
     tcp_control ctrl2(0,1,0,0,0,0,this->seq_next, this->ack_next);
-    int no_of_try = 0;
+    no_of_try = 0;
     while(!this->send_control_packet(ctrl2,addr,addrlen) && no_of_try++ <= MAX_RETRANSMITION)
     if(no_of_try > MAX_RETRANSMITION) return false;
 
@@ -191,6 +192,7 @@ ssize_t TCP::send_data_reliable(const void *buf, size_t len)
     while((bytes_sent = this->send_packet(packet, packet_len, &this->d_addr, sizeof(this->d_addr))) == -1 
                       && no_of_try++ <= MAX_RETRANSMITION)
     if(no_of_try > MAX_RETRANSMITION) return -1;
+    free(packet);
 
     // get ACK
     int recv_bytes = this->receive_control_packet();
@@ -261,7 +263,7 @@ int TCP::receive_control_packet()
     std::cout << "syn : " << tcp->syn << "ack : " << tcp->ack << std::endl;
 
     this->seq_next = ntohl(tcp->ack_seq);
-    this->ack_next = ntohl(tcp->seq) + 1;
+    this->ack_next = ntohl(tcp->seq) + (uint32_t)1;
 
     return recv_bytes;
 }
@@ -354,11 +356,15 @@ void TCP::create_data_packet(const char* buf, size_t len, char** out_packet, int
 	struct tcphdr *tcph =    (struct tcphdr*)(datagram + sizeof(struct iphdr));
 	struct pseudo_header psh;
 
+    // Payload
+    char* payload = datagram + sizeof(struct iphdr) + sizeof(struct tcphdr) + OPT_SIZE;
+	memcpy(payload, buf, len);
+
 	// IP header configuration
 	iph->ihl            =     5;
 	iph->version        =     4;
 	iph->tos            =     0;
-	iph->tot_len        =     sizeof(struct iphdr) + sizeof(struct tcphdr);
+	iph->tot_len        =     sizeof(struct iphdr) + sizeof(struct tcphdr) + OPT_SIZE + len;
 	iph->id             =     htonl(this->id++);
 	iph->frag_off       =     0;
 	iph->ttl            =     64;
@@ -371,14 +377,14 @@ void TCP::create_data_packet(const char* buf, size_t len, char** out_packet, int
 	// TCP header configuration
 	tcph->source        =     htons(this->bind_port);
 	tcph->dest          =     dst->sin_port;
-	tcph->seq           =     htonl(ctrl.seq_no);     // TODO: later handle seq number
-	tcph->ack_seq       =     htonl(ctrl.ack_no);                   // TODO: later handle ack number
+	tcph->seq           =     htonl(this->seq_next);     // TODO: later handle seq number
+	tcph->ack_seq       =     htonl(this->ack_next);                   // TODO: later handle ack number
 	tcph->doff          =     10; // tcp header size
 	tcph->fin           =     0;
 	tcph->syn           =     0;
 	tcph->rst           =     0;
-	tcph->psh           =     0;
-	tcph->ack           =     0;
+	tcph->psh           =     1;
+	tcph->ack           =     1;
 	tcph->urg           =     0;
 	tcph->check         =     0; // correct calculation follows later
 	tcph->window        =     htons(5840); // window size
@@ -390,14 +396,14 @@ void TCP::create_data_packet(const char* buf, size_t len, char** out_packet, int
 	psh.d_addr          =     dst->sin_addr.s_addr;
 	psh.nil             =     0;
 	psh.IP_protocol     =     IPPROTO_TCP;
-	psh.tot_Len         =     htons(sizeof(struct tcphdr));
-	int psize           =     sizeof(struct pseudo_header) + sizeof(struct tcphdr);
+	psh.tot_Len         =     htons(sizeof(struct tcphdr) + OPT_SIZE + len);
+	int psize           =     sizeof(struct pseudo_header) + sizeof(struct tcphdr) + OPT_SIZE + len;
 
 	// fill pseudo packet
 	char* pseudogram    =     (char *)malloc(psize);
 
 	memcpy(pseudogram, (char*)&psh, sizeof(struct pseudo_header));
-	memcpy(pseudogram + sizeof(struct pseudo_header), tcph, sizeof(struct tcphdr));
+	memcpy(pseudogram + sizeof(struct pseudo_header), tcph, sizeof(struct tcphdr) + OPT_SIZE + len);
 
 	tcph->check = checksum((const char*)pseudogram, psize);
 	iph->check = checksum((const char*)datagram, iph->tot_len);
