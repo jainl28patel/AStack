@@ -81,6 +81,7 @@ private:
     // state
     int sockState;
     int id;
+    struct sockaddr d_addr;
     uint32_t seq_next, ack_next;
 
     // process identifier
@@ -121,15 +122,19 @@ public:
 private:
 
     // High level private API : major actions performed by TCP
-    bool three_way_handshake(const sockaddr *addr, socklen_t addrlen);
+    bool connect_three_way_handshake(const sockaddr *addr, socklen_t addrlen);
+    bool disconnect_three_way_handshake(const sockaddr *addr, socklen_t addrlen);
+    ssize_t send_data_reliable(const void *buf, size_t len);
 
 
     // Low level private API. To be used by high level API to carry out execution
     bool send_control_packet(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen);
     void create_control_packet(tcp_control& ctrl, const sockaddr_in* dst, char** out_packet, int* out_packet_len);
-    bool send_packet(char* packet, int& packet_len, const sockaddr* addr, socklen_t addrlen);
+    ssize_t send_packet(char* packet, int& packet_len, const sockaddr* addr, socklen_t addrlen);
     int receive_packet(char* buffer, size_t buffer_length);
     int receive_control_packet();
+    void create_data_packet(const char* buf, size_t len, char** out_packet, int* out_packet_len);
+
 
     // Utility functions
     void unpack_header_from_data(iphdr* ip, tcphdr* tcp_ctrl, char* data, int data_length);

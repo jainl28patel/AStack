@@ -26,3 +26,7 @@ int connect_m(Msocket& sock, const struct sockaddr* addr, socklen_t addrlen);
 int accept_m(Msocket& sock, struct sockaddr* addr, socklen_t* addrlen);
 
 int listen_m(Msocket& sock, int backlog);
+
+int send_m(Msocket &sock, const void* buf, size_t len, int flags);
+
+int recv_m(Msocket &sock, void* buf, size_t len, int flags);

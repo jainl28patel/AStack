@@ -64,11 +64,19 @@ TCP::TCP()
 
 ssize_t TCP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t addrlen)
 {
-    return ssize_t();
+    // TODO: Check connection state
+    // if valid
+
+    // send data packet // TODO: Implement state machine, timeout for auto retransmission
+    // lisen for ACK
+    ssize_t data_len = this->send_data_reliable(buf, len);
+
+    return data_len;
 }
 
 ssize_t TCP::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
 {
+    
     return ssize_t();
 }
 
@@ -86,7 +94,11 @@ int TCP::connect_m(const sockaddr *addr, socklen_t addrlen)
     if(this->bind_port == -1) {
         this->bind_port = this->getRandomPort(MIN_RANDOM_PORT, MAX_RANDOM_PORT);
     }
-    bool handshake_status = this->three_way_handshake(addr, addrlen);
+
+    // store copy of destination address struct
+    this->d_addr = *addr;
+
+    bool handshake_status = this->connect_three_way_handshake(addr, addrlen);
     return handshake_status;
 }
 
@@ -118,7 +130,7 @@ TCP::~TCP()
     -------------------------------------------------------------------
 */
 
-bool TCP::three_way_handshake(const sockaddr *addr, socklen_t addrlen)
+bool TCP::connect_three_way_handshake(const sockaddr *addr, socklen_t addrlen)
 {
 
     // Sending SYN
@@ -128,19 +140,12 @@ bool TCP::three_way_handshake(const sockaddr *addr, socklen_t addrlen)
     if(no_of_try > MAX_RETRANSMITION) return false;
 
     // Recieving SYN-ACK
-    char* buf = new char[MAX_RECV_BUF_SIZE];
-    int status = this->receive_packet(buf, MAX_RECV_BUF_SIZE);  // TODO: Add timeout upto what time to wait
-    if(status <= 0) {
-        printf("receive_packet() failed\n");
-        return false;
-    }
-
-    status = receive_control_packet();
+    int status = receive_control_packet(); // TODO: Add timeout upto what time to wait
 
     // TODO: check validity of ACK Packet
 
     // send ACK
-    tcp_control ctrl2(0,1,0,0,0,0,this->seq_next, this->ack_next);  // TODO: Add ack number as per recieved packet
+    tcp_control ctrl2(0,1,0,0,0,1,this->seq_next, this->ack_next);  // TODO: Add ack number as per recieved packet
     no_of_try = 0;
     while(!this->send_control_packet(ctrl2,addr,addrlen) && no_of_try++ <= MAX_RETRANSMITION)
     if(no_of_try > MAX_RETRANSMITION) return false;
@@ -150,7 +155,48 @@ bool TCP::three_way_handshake(const sockaddr *addr, socklen_t addrlen)
  
 }
 
+bool TCP::disconnect_three_way_handshake(const sockaddr *addr, socklen_t addrlen)
+{
+    // temp // TODO: add proper state management and handling of seq_no and ack_no
 
+    // Sending FIN
+    this->seq_next += 1;
+    tcp_control ctrl(0,0,0,0,0,1,this->seq_next,this->ack_next);
+    int no_of_try = 0;
+    while(!this->send_control_packet(ctrl,addr,addrlen) && no_of_try++ <= MAX_RETRANSMITION)
+    if(no_of_try > MAX_RETRANSMITION) return false;
+
+    // Recieve FIN-ACK
+    int status = receive_control_packet();
+
+    // TODO: Check for validity;
+
+    tcp_control ctrl2(0,1,0,0,0,0,this->seq_next, this->ack_next);
+    int no_of_try = 0;
+    while(!this->send_control_packet(ctrl2,addr,addrlen) && no_of_try++ <= MAX_RETRANSMITION)
+    if(no_of_try > MAX_RETRANSMITION) return false;
+
+    return true;
+}
+
+ssize_t TCP::send_data_reliable(const void *buf, size_t len)
+{
+    int no_of_try = 0;
+    int bytes_sent = 0;
+
+    // send Data Packet
+    char* packet;
+    int packet_len;
+    this->create_data_packet((const char*)buf, len, &packet, &packet_len);
+    while((bytes_sent = this->send_packet(packet, packet_len, &this->d_addr, sizeof(this->d_addr))) == -1 
+                      && no_of_try++ <= MAX_RETRANSMITION)
+    if(no_of_try > MAX_RETRANSMITION) return -1;
+
+    // get ACK
+    int recv_bytes = this->receive_control_packet();
+
+    return bytes_sent;
+}
 
 /*
     -------------------------------------------------------------
@@ -162,7 +208,7 @@ bool TCP::three_way_handshake(const sockaddr *addr, socklen_t addrlen)
 
 
 
-bool TCP::send_packet(char* packet, int& packet_len, const sockaddr* addr, socklen_t addrlen)
+ssize_t TCP::send_packet(char* packet, int& packet_len, const sockaddr* addr, socklen_t addrlen)
 {
     return sendto(sock, packet, packet_len, 0, (struct sockaddr*)addr, addrlen);
 }
@@ -217,7 +263,7 @@ int TCP::receive_control_packet()
     this->seq_next = ntohl(tcp->ack_seq);
     this->ack_next = ntohl(tcp->seq) + 1;
 
-    return recv_bytes>0;
+    return recv_bytes;
 }
 
 void TCP::create_control_packet(tcp_control& ctrl, const sockaddr_in* dst, char** out_packet, int* out_packet_len)
@@ -297,6 +343,69 @@ void TCP::create_control_packet(tcp_control& ctrl, const sockaddr_in* dst, char*
 	free(pseudogram);
 }
 
+void TCP::create_data_packet(const char* buf, size_t len, char** out_packet, int* out_packet_len)
+{
+    // datagram to represent the packet
+	char *datagram      =    (char *)calloc(DATAGRAM_LEN, sizeof(char));
+    sockaddr_in* dst    =    (struct sockaddr_in*)&this->d_addr;
+
+	// required structs for IP and TCP header
+	struct iphdr *iph   =    (struct iphdr*)datagram;
+	struct tcphdr *tcph =    (struct tcphdr*)(datagram + sizeof(struct iphdr));
+	struct pseudo_header psh;
+
+	// IP header configuration
+	iph->ihl            =     5;
+	iph->version        =     4;
+	iph->tos            =     0;
+	iph->tot_len        =     sizeof(struct iphdr) + sizeof(struct tcphdr);
+	iph->id             =     htonl(this->id++);
+	iph->frag_off       =     0;
+	iph->ttl            =     64;
+	iph->protocol       =     IPPROTO_TCP;
+	iph->check          =     0; // correct calculation follows later
+	// iph->saddr = src-ad    dr.s_addr;   // TODO: Add interface address
+    iph->saddr          =     inet_addr("127.0.0.1");
+	iph->daddr          =     dst->sin_addr.s_addr;
+
+	// TCP header configuration
+	tcph->source        =     htons(this->bind_port);
+	tcph->dest          =     dst->sin_port;
+	tcph->seq           =     htonl(ctrl.seq_no);     // TODO: later handle seq number
+	tcph->ack_seq       =     htonl(ctrl.ack_no);                   // TODO: later handle ack number
+	tcph->doff          =     10; // tcp header size
+	tcph->fin           =     0;
+	tcph->syn           =     0;
+	tcph->rst           =     0;
+	tcph->psh           =     0;
+	tcph->ack           =     0;
+	tcph->urg           =     0;
+	tcph->check         =     0; // correct calculation follows later
+	tcph->window        =     htons(5840); // window size
+	tcph->urg_ptr       =     0;
+
+	// TCP pseudo header for checksum calculation
+	// psh.s_addr = src->sin_addr.s_addr;   // TODO
+    psh.s_addr          =     inet_addr("127.0.0.1");
+	psh.d_addr          =     dst->sin_addr.s_addr;
+	psh.nil             =     0;
+	psh.IP_protocol     =     IPPROTO_TCP;
+	psh.tot_Len         =     htons(sizeof(struct tcphdr));
+	int psize           =     sizeof(struct pseudo_header) + sizeof(struct tcphdr);
+
+	// fill pseudo packet
+	char* pseudogram    =     (char *)malloc(psize);
+
+	memcpy(pseudogram, (char*)&psh, sizeof(struct pseudo_header));
+	memcpy(pseudogram + sizeof(struct pseudo_header), tcph, sizeof(struct tcphdr));
+
+	tcph->check = checksum((const char*)pseudogram, psize);
+	iph->check = checksum((const char*)datagram, iph->tot_len);
+
+	*out_packet = datagram;
+	*out_packet_len = iph->tot_len;
+	free(pseudogram);
+}
 
 /*
     Utility functions

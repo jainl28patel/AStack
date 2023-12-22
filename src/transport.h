@@ -24,8 +24,8 @@ private:
 
 public:
     Transport();
-    virtual ssize_t send(const void* buf, size_t len, const sockaddr* addr, socklen_t addrlen);
-    virtual ssize_t recv(void* buf, size_t len, sockaddr* addr, socklen_t* addr_len);
+    virtual ssize_t send(const void* buf, size_t len, const sockaddr* addr = NULL, socklen_t addrlen = 0);
+    virtual ssize_t recv(void* buf, size_t len, sockaddr* addr = 0, socklen_t* addr_len = 0);
     virtual int bind_m(const sockaddr *addr, socklen_t addrlen);
     virtual int connect_m(const struct sockaddr* addr, socklen_t addrlen);
     virtual int accept_m(sockaddr *addr, socklen_t *addrlen);

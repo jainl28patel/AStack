@@ -28,12 +28,15 @@ Msocket::Msocket(int domain, int type, int protocol)
     }
 }
 
-ssize_t Msocket::send(const void *buf, size_t len, const sockaddr *addr, socklen_t addr_len)
+ssize_t Msocket::send(const void *buf, size_t len, int flag, const sockaddr *addr, socklen_t addr_len)
 {
-    return this->prot->send(buf, len, addr, addr_len);
+    if(addr == NULL)
+        return this->prot->send(buf, len, addr, addr_len);
+    else
+        return this->prot->send(buf,len);
 }
 
-ssize_t Msocket::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
+ssize_t Msocket::recv(void *buf, size_t len, int flag, sockaddr *addr, socklen_t *addr_len)
 {
     return this->prot->recv(buf, len, addr, addr_len);
 }
