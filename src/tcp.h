@@ -127,6 +127,7 @@ private:
     bool connect_three_way_handshake(const sockaddr *addr, socklen_t addrlen);
     bool disconnect_three_way_handshake(const sockaddr *addr, socklen_t addrlen);
     ssize_t send_data_reliable(const void *buf, size_t len);
+    ssize_t recv_data_reliable(void *buf, size_t len);
 
 
     // Low level private API. To be used by high level API to carry out execution

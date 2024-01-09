@@ -77,7 +77,7 @@ ssize_t TCP::send(const void *buf, size_t len, const sockaddr *addr, socklen_t a
 
 ssize_t TCP::recv(void *buf, size_t len, sockaddr *addr, socklen_t *addr_len)
 {
-    
+    ssize_t data_len = this->recv_data_reliable(buf, len);
     return ssize_t();
 }
 
@@ -200,6 +200,24 @@ ssize_t TCP::send_data_reliable(const void *buf, size_t len)
     return bytes_sent;
 }
 
+ssize_t TCP::recv_data_reliable(void *buf, size_t len)
+{
+    // recv data
+    char* data_recv_buf = new char[MAX_RECV_BUF_SIZE];
+    ssize_t data_len = this->receive_packet(data_recv_buf, MAX_RECV_BUF_SIZE);
+
+    // get the ip and tcp header
+    struct iphdr* ip;
+    struct tcphdr* tcp;
+    ip = (struct iphdr*)(data_recv_buf);
+    tcp = (struct tcphdr*)(data_recv_buf + ip->ihl*4);
+
+    // buf = (void *)(data_recv_buf + ip->ihl*4 + tcp->doff*4);
+    // std::cout << "size : " << data_len << std::endl;
+    memcpy(buf,(data_recv_buf + ip->ihl*4 + tcp->doff*4), std::min(ip->tot_len - ip->ihl*4 + tcp->doff*4, (int)len));
+    return ssize_t(std::min(ip->tot_len - ip->ihl*4 + tcp->doff*4, (int)len));
+}
+
 /*
     -------------------------------------------------------------
                     Low level private APIs. 
@@ -232,8 +250,6 @@ int TCP::receive_packet(char* buffer, size_t buffer_length)
 	printf("received bytes: %d\n", received);
 	return received;
 }
-
-
 
 bool TCP::send_control_packet(tcp_control& ctrl, const struct sockaddr* addr, socklen_t addrlen)
 {
