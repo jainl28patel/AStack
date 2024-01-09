@@ -263,7 +263,7 @@ int TCP::receive_control_packet()
     std::cout << "syn : " << tcp->syn << "ack : " << tcp->ack << std::endl;
 
     this->seq_next = ntohl(tcp->ack_seq);
-    this->ack_next = ntohl(tcp->seq) + (uint32_t)1;
+    if(tcp->syn) this->ack_next = ntohl(tcp->seq) + (uint32_t)1;
 
     return recv_bytes;
 }

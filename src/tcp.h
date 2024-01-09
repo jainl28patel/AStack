@@ -94,19 +94,21 @@ private:
     sendBuf   * s_buf;
     recvBuf   * r_buf;
 
+    // TCP State machine
+
     // State Enum
     enum State {
-        CLOSED,
-        LISTEN,
-        SYN_RCVD,
-        SYN_SENT,
-        ESTABLISHED,
-        FIN_WAIT1,
-        FIN_WAIT2,
-        TIME_WAIT,
-        CLOSING,
-        CLOSE_WAIT,
-        LAST_ACK,
+        CLOSED = 0,
+        LISTEN = 1,
+        SYN_RCVD = 2,
+        SYN_SENT = 3,
+        ESTABLISHED = 4,
+        FIN_WAIT1 = 5,
+        FIN_WAIT2 = 6,
+        TIME_WAIT = 7,
+        CLOSING = 8,
+        CLOSE_WAIT = 9,
+        LAST_ACK = 10
     };
 
     // socket type enum
